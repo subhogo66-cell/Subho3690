@@ -1,6 +1,8 @@
 import os
 import logging
+import threading
 from datetime import datetime
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import yfinance as yf
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
@@ -12,12 +14,27 @@ logging.basicConfig(
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHAT_ID   = os.environ.get("CHAT_ID", "")
+PORT      = int(os.environ.get("PORT", 8080))
 
 WATCHLIST = [
     "RELIANCE.NS", "TCS.NS", "INFY.NS",
     "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS"
 ]
 
+# ── Health Check HTTP Server ──────────────────────
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive!")
+    def log_message(self, format, *args):
+        pass  # HTTP log বন্ধ রাখো
+
+def run_health_server():
+    server = HTTPServer(("0.0.0.0", PORT), HealthHandler)
+    server.serve_forever()
+
+# ── Indicators ────────────────────────────────────
 def calc_rsi(series, period=14):
     delta    = series.diff()
     gain     = delta.clip(lower=0)
@@ -86,6 +103,7 @@ def format_msg(data):
         f"🕐 Time   : {datetime.now().strftime('%d %b, %I:%M %p')}"
     )
 
+# ── Telegram Handlers ─────────────────────────────
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 *NSE Trading Alert Bot*\n\n"
@@ -112,7 +130,7 @@ async def price_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Usage: /price RELIANCE")
         return
     symbol = ctx.args[0].upper() + ".NS"
-    await update.message.reply_text(f"⏳ Price আনছি...")
+    await update.message.reply_text("⏳ Price আনছি...")
     try:
         ticker = yf.Ticker(symbol)
         price  = ticker.fast_info.last_price
@@ -156,7 +174,13 @@ async def auto_alert(ctx: ContextTypes.DEFAULT_TYPE):
         msg = header + "\n─────────────\n".join(alerts)
         await ctx.bot.send_message(chat_id=CHAT_ID, text=msg, parse_mode="Markdown")
 
+# ── Main ──────────────────────────────────────────
 def main():
+    # HTTP server আলাদা thread-এ চালু করো
+    t = threading.Thread(target=run_health_server, daemon=True)
+    t.start()
+    logging.info(f"Health server চালু: port {PORT}")
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start",     start))
     app.add_handler(CommandHandler("help",      help_cmd))
