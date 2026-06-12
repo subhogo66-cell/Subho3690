@@ -1,23 +1,22 @@
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+import telegram
+from telegram.ext import Updater, CommandHandler
 
 TOKEN = os.environ.get("BOT_TOKEN")
 
-if not TOKEN:
-    print("ERROR: BOT_TOKEN not set!")
-    exit(1)
+def start(update, context):
+    update.message.reply_text("Welcome to Astro Trading Bot!\n\nSend /moon for moon impact")
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("🌙 Moon Impact", callback_data="moon")]]
-    await update.message.reply_text("Welcome!", reply_markup=InlineKeyboardMarkup(keyboard))
+def moon(update, context):
+    update.message.reply_text("🌙 Moon Impact: Today is normal volatility. Trade with caution.")
 
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
-    await update.callback_query.edit_message_text("Moon: Normal volatility today.")
+def main():
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("moon", moon))
+    updater.start_polling()
+    updater.idle()
 
-app = Application.builder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CallbackQueryHandler(button))
-print("Bot is running...")
-app.run_polling()
+if __name__ == "__main__":
+    main()
